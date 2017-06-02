@@ -1,0 +1,185 @@
+---
+title: "Prediction Assignment"
+author: "Ngozi Ihemelandu"
+date: "June 01, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r echo=FALSE}
+library(caret)
+```
+
+###Load The Data from CSV###
+
+```{r}
+filename <- "pml-training.csv"
+dataset <- read.csv(filename)
+```
+
+###Exploratory Analysis###
+
+**Dimensions of the dataset**
+```{r}
+dim(dataset)
+```
+
+**Peek at the structure of the Data**
+```{r}
+str(dataset)
+```
+
+**Levels of the Class**
+```{r}
+levels(dataset$classe)
+```
+
+**Class Distribution**
+```{r}
+percentage <- prop.table(table(dataset$classe)) * 100
+cbind(freq=table(dataset$classe), percentage=percentage)
+```
+
+**Visualize the class distribution of the Dataset**
+
+We would use a Histogram to plot the density of the distribution of the target variable - Classe 
+for each of the six young health participants
+```{r, echo=FALSE}
+ggplot(data=dataset, aes(x=classe)) +
+        geom_bar() +
+        ggtitle("Histogram of Exercise Execution \nby health participants") +
+        labs(x="Correctness of Exercise Execution", y="Count\nof Records") +
+        facet_wrap(~user_name)
+```
+
+###Clean data set###
+
+Remove attributes in which more than 97% of the cases are missing values
+```{r}
+dataset <- dataset[which(apply(is.na(dataset),2,sum) < (0.97 * nrow(dataset)))]
+```
+
+Remove attributes where more than 97% of the cases contains values such as '#DIV/0!' and are empty
+```{r}
+dataset <- dataset[which(apply(dataset,2,function(cl)sum(cl== "" | cl == "#DIV/0!")) < (0.97 * nrow(dataset)))]
+```
+
+###Evaluate Some Algorithms###
+
+Given that selecting a machine learning algorithm is a process of trial and error We would evaluate 4 different algorithms. To ensure that the evaluation of each algorithm is performed using exactly the same data splits, we would set the random number seed. This also ensures the results are directly comparable. We would use repeated 10-fold cross-validation to choose the tuning parameters for the models. 
+
+**Determination of Tuning Parameters**
+
+We would choose tuning parameters using resampling of 3 repeats of 10-fold cross-validation. The numerical optimal parameter value would be choosen as the final tuning parameter by the train function.
+
+**prepare training scheme**
+```{r}
+control <- trainControl(method="repeatedcv", number=10, repeats=3)
+```
+
+**Train the CART (Classification and Regression Trees) model**
+```{r, echo=FALSE}
+set.seed(100)
+modelCART <- train(classe~., data=dataset, method="rpart", trControl=control)
+```
+
+**Train the KNN (k-nearest neighbors) model**
+```{r, echo=FALSE}
+set.seed(100)
+modelknn <- train(classe~., data=dataset, method="knn", preProc=c("center","scale"), trControl=control)
+```
+
+**Train the SVM (Support Vector Machine) model**
+```{r, echo=FALSE}
+set.seed(100)
+modelSvm <- train(classe~., data=dataset, method="svmRadial", trControl=control)
+```
+
+**Train the RF (Random Forest) model**
+```{r, echo=FALSE}
+set.seed(100)
+modelRF <- train(classe~., data=dataset, method="rf", trControl=control)
+```
+
+**Between Model Comparisons**
+
+To compare these models based on their cross-validation statistics, the resamples function will be used. Since the random number seed was initialized prior to running each of the models, paired accuracy measurements exist for each data set.
+
+```{r}
+results <- resamples(list(CART=modelCART, KNN=modelknn, SVM=modelSvm, RF=modelRF))
+```
+
+**Summarize the distributions**
+```{R}
+summary(results)
+```
+
+**Select Best Model**
+
+The summary indicates that the performance distributions are very similiar across all modules except for the CART module. The objective for this project is prediction accuracy on a new set of data, hence We would select the random forest model based on the numerical optimal value of the mean. 
+
+###Tune selected model - Random Forest###
+
+**Tune parameter candidates**
+```{r}
+modelRF$results
+```
+
+**Selected tune parameter**
+```{r}
+modelRF$bestTune
+```
+
+**Train selected Model**
+
+The data set is split into a train and a test set. It is a good idea to favor simpler models over more complex ones. Hence, choosing the tuning parameters based on the numerically optimal value may lead to a model that is overly complicated and leads to overfitting. To get a simpler model, we would reset the value of the tune parameter(mtry) to 2 and retrain the model.
+```{r echo=FALSE}
+set.seed(100)
+inTraining <- createDataPartition(dataset$classe, p = .75, list = FALSE)
+training <- dataset[ inTraining,]
+testing  <- dataset[-inTraining,]
+rfGrid <-  expand.grid(mtry = c(2))
+modelRF <- train(classe~., data=training, method="rf", trControl=control, tuneGrid=rfGrid, verboseIter = TRUE)
+predictedClasses <- predict(modelRF,testing)
+```
+
+**generalization error rate (out-of-sample error rate)**
+```{r}
+eval.Table = table(predictedClasses,testing$classe)
+eval.Table
+errorRate = (sum(eval.Table[row(eval.Table) != col(eval.Table)]) / sum(eval.Table)) * 100
+errorRate
+```
+
+The generalization error rate is acceptable, so we would retrain the model using the complete dataset with final value for the mtry parameter = 2
+```{r}
+rfGrid <-  expand.grid(mtry = c(2))
+modelRF <- train(classe~., data=dataset, method="rf", trControl=control, tuneGrid=rfGrid, verboseIter = TRUE)
+```
+
+###Make Predictions for the 20 test cases using the selected best model###
+
+**Preprocess the test dataset**
+```{r}
+filename <- "pml-testing.csv"
+validation <- read.csv(filename)
+#Remove attributes in which more than 97% of the cases are missing values
+validation <- validation[which(apply(is.na(validation),2,sum) < (0.97 * nrow(validation)))]
+
+#Remove attributes where more than 97% of the cases contains values such as '#DIV/0!' and are empty
+validation <- validation[which(apply(validation,2,function(cl)sum(cl== "" | cl == "#DIV/0!")) < (0.97 * nrow(validation)))]
+
+#Ensure that the factor variables in the training set and the test set have the same levels
+levels(validation$new_window) <- levels(dataset$new_window)
+levels(validation$cvtd_timestamp) <- levels(dataset$cvtd_timestamp)
+```
+
+**Predict the new samples with the trained model**
+```{r}
+predictedClasses <- predict(modelRF,validation)
+predictedClasses
+```
