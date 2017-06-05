@@ -1,7 +1,7 @@
 ---
 title: "Prediction Assignment"
 author: "Ngozi Ihemelandu"
-date: "June 01, 2017"
+date: "June 05, 2017"
 output: html_document
 ---
 

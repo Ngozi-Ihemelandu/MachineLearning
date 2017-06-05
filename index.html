@@ -11,7 +11,7 @@
 
 <meta name="author" content="Ngozi Ihemelandu" />
 
-<meta name="date" content="2017-06-01" />
+<meta name="date" content="2017-06-05" />
 
 <title>Prediction Assignment</title>
 
@@ -119,13 +119,13 @@ $(document).ready(function () {
 
 <h1 class="title toc-ignore">Prediction Assignment</h1>
 <h4 class="author"><em>Ngozi Ihemelandu</em></h4>
-<h4 class="date"><em>June 01, 2017</em></h4>
+<h4 class="date"><em>June 05, 2017</em></h4>
 
 </div>
 
+<h3>Load The Caret Package</h3>
+<pre class="r"><code>library(caret)</code></pre>
 
-<pre><code>## Loading required package: lattice</code></pre>
-<pre><code>## Loading required package: ggplot2</code></pre>
 <div id="load-the-data-from-csv" class="section level3">
 <h3>Load The Data from CSV</h3>
 <pre class="r"><code>filename &lt;- &quot;pml-training.csv&quot;
@@ -323,7 +323,15 @@ modelRF &lt;- train(classe~., data=dataset, method=&quot;rf&quot;, trControl=con
 <pre><code>##   mtry
 ## 2   41</code></pre>
 <p><strong>Train selected Model</strong></p>
-<p>The data set is split into a train and a test set. It is a good idea to favor simpler models over more complex ones. Hence, choosing the tuning parameters based on the numerically optimal value may lead to a model that is overly complicated and may lead to overfitting. To get a simpler model, we would reset the value of the tune parameter(mtry) to 2 and retrain the model.</p>
+<p>It is a good idea to favor simpler models over more complex ones. Hence, choosing the tuning parameters based on the numerically optimal value may lead to a model that is overly complicated which may lead to overfitting. To get a simpler model, we would reset the value of the tune parameter(mtry) to 2, retrain the model and evaluate the out-of-sample-error.
+To achieve this, the data set is split into a train and a test set, to train and evaluate the model respectively. </p>
+<pre class="r"><code>set.seed(100)
+inTraining <- createDataPartition(dataset$classe, p = .75, list = FALSE)
+training <- dataset[ inTraining,]
+testing  <- dataset[-inTraining,]
+rfGrid <-  expand.grid(mtry = c(2))
+modelRF <- train(classe~., data=training, method="rf", trControl=control, tuneGrid=rfGrid, verboseIter = TRUE)
+predictedClasses <- predict(modelRF,testing)</code></pre>
 <p><strong>Generalization Error Rate (Out-Of-Sample error rate)</strong></p>
 <pre class="r"><code>eval.Table = table(predictedClasses,testing$classe)
 eval.Table</code></pre>
